@@ -7,8 +7,12 @@ import { PDFDocument } from "pdf-lib";
 import path from "path";
 
 const app = express();
-app.use(cors());
-
+app.use(
+  cors({
+    origin: "http://localhost:3000", // Next.js frontend ka origin (change if deployed)
+    credentials: true, // only if you’re sending cookies (optional)
+  })
+);
 // Multer disk storage setup
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
