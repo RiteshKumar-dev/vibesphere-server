@@ -9,7 +9,7 @@ import path from "path";
 const app = express();
 app.use(
   cors({
-    origin: "http://localhost:3000", // Next.js frontend ka origin (change if deployed)
+    origin: ["https://vibesphere-pi.vercel.app", "http://localhost:3000"], // Next.js frontend ka origin (change if deployed)
     credentials: true, // only if you’re sending cookies (optional)
   })
 );
