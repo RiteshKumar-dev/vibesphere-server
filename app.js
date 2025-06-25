@@ -51,7 +51,10 @@ app.post("/api/v1/upload/pdf", upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded." });
   }
-
+  const { jobDescription } = req.body;
+  if (!jobDescription) {
+    return res.status(400).json({ message: "Job description is required." });
+  }
   const filePath = req.file.path;
 
   try {
@@ -60,8 +63,6 @@ app.post("/api/v1/upload/pdf", upload.single("file"), async (req, res) => {
       fs.readFileSync(filePath),
       "uploads"
     );
-    console.log(`✅ PDF split into ${pagePaths.length} pages`);
-
     // Step 2: Load & Extract Text using LangChain
     const loader = new PDFLoader(filePath);
     const docs = await loader.load();
@@ -73,6 +74,7 @@ app.post("/api/v1/upload/pdf", upload.single("file"), async (req, res) => {
     return res.status(200).json({
       message: "PDF processed successfully.",
       extractedText: fullText,
+      jobDescription: jobDescription,
       totalPages: pagePaths.length,
       pageFiles: pagePaths, // You can filter or format paths if needed
     });
