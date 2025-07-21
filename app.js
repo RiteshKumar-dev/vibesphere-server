@@ -1,18 +1,26 @@
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import fs from "fs";
-import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
-import { PDFDocument } from "pdf-lib";
+import fs from "fs/promises";
 import path from "path";
+import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
+import { splitPdfByPages } from "./utils/pdfUtils.js";
 
 const app = express();
+const PORT = 5000;
+
+// Ensure 'uploads' directory exists
+const uploadsDir = path.join(process.cwd(), "uploads");
+await fs.mkdir(uploadsDir, { recursive: true });
+
+app.use(express.json());
 app.use(
   cors({
-    origin: ["https://vibesphere-pi.vercel.app", "http://localhost:3000"], // Next.js frontend ka origin (change if deployed)
-    credentials: true, // only if you’re sending cookies (optional)
+    origin: ["https://vibesphere-pi.vercel.app", "http://localhost:3000"],
+    credentials: true,
   })
 );
+
 // Multer disk storage setup
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -26,59 +34,85 @@ const storage = multer.diskStorage({
     );
   },
 });
-const upload = multer({ storage: storage });
+const upload = multer({ storage });
 
-// Split PDF into pages
-async function splitPdfByPages(pdfBuffer, outputDir) {
-  const pdfDoc = await PDFDocument.load(pdfBuffer);
-  const totalPages = pdfDoc.getPageCount();
-  const pagePaths = [];
+//health check route
+app.get("/api/v1/health", (req, res) => {
+  res.status(200).json({ message: "Server is running" });
+});
 
-  for (let i = 0; i < totalPages; i++) {
-    const newPdf = await PDFDocument.create();
-    const [copiedPage] = await newPdf.copyPages(pdfDoc, [i]);
-    newPdf.addPage(copiedPage);
-    const pdfBytes = await newPdf.save();
-    const filePath = path.join(outputDir, `page-${i + 1}.pdf`);
-    fs.writeFileSync(filePath, pdfBytes);
-    pagePaths.push(filePath);
-  }
-
-  return pagePaths;
-}
-
+// Upload route
 app.post("/api/v1/upload/pdf", upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded." });
   }
-  const { jobDescription } = req.body;
-  if (!jobDescription) {
-    return res.status(400).json({ message: "Job description is required." });
+
+  const {
+    jobDescription,
+    jobPosition,
+    interviewTypes,
+    difficultyLevel,
+    interviewDuration,
+    userId,
+  } = req.body;
+  // Validate required fields
+  if (
+    !jobDescription ||
+    !jobPosition ||
+    !interviewTypes ||
+    !userId ||
+    !interviewDuration
+  ) {
+    return res.status(400).json({
+      message: "Missing one or more required fields.",
+    });
   }
+
+  if (!["Easy", "Medium", "Hard"].includes(difficultyLevel)) {
+    return res.status(400).json({
+      message: "Invalid difficulty level. Allowed values: Easy, Medium, Hard.",
+    });
+  }
+
+  let parsedInterviewTypes;
+  try {
+    parsedInterviewTypes = JSON.parse(interviewTypes);
+    if (!Array.isArray(parsedInterviewTypes)) {
+      throw new Error("Not an array");
+    }
+  } catch (e) {
+    return res
+      .status(400)
+      .json({ message: "Interview types must be a valid array." });
+  }
+
   const filePath = req.file.path;
 
   try {
-    // Step 1: Split PDF
-    const pagePaths = await splitPdfByPages(
-      fs.readFileSync(filePath),
-      "uploads"
-    );
-    // Step 2: Load & Extract Text using LangChain
+    const pdfBuffer = await fs.readFile(filePath);
+    const pagePaths = await splitPdfByPages(pdfBuffer, "uploads");
+
     const loader = new PDFLoader(filePath);
     const docs = await loader.load();
     const fullText = docs.map((doc) => doc.pageContent).join("\n");
 
-    // Optional: Delete uploaded original file after processing
-    fs.unlink(filePath, () => {});
+    // Delete the original PDF after processing
+    await fs.unlink(filePath);
 
     return res.status(200).json({
       message: "PDF processed successfully.",
       extractedText: fullText,
-      jobDescription: jobDescription,
+      jobDescription,
+      jobPosition,
+      interviewTypes: parsedInterviewTypes,
+      userId,
+      difficultyLevel,
+      interviewDuration,
       totalPages: pagePaths.length,
-      pageFiles: pagePaths, // You can filter or format paths if needed
+      pageFiles: pagePaths,
     });
   } catch (err) {
+    console.error("❌ Error processing PDF:", err.message);
     return res.status(500).json({
       message: "Failed to process PDF.",
       error: err.message,
@@ -86,6 +120,45 @@ app.post("/api/v1/upload/pdf", upload.single("file"), async (req, res) => {
   }
 });
 
-app.listen(5000, () => {
-  console.log("✅ Server running on port 5000");
+app.post("/api/v1/upload/apply", upload.single("resume"), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: "No file uploaded." });
+  }
+
+  const { jobTitle } = req.body;
+
+  if (!jobTitle) {
+    return res.status(400).json({ message: "Missing job title." });
+  }
+  const filePath = req.file.path;
+
+  try {
+    const pdfBuffer = await fs.readFile(filePath);
+    const pagePaths = await splitPdfByPages(pdfBuffer, "uploads");
+
+    const loader = new PDFLoader(filePath);
+    const docs = await loader.load();
+    const fullText = docs.map((doc) => doc.pageContent).join("\n");
+
+    await fs.unlink(filePath); // Delete original after processing
+
+    return res.status(200).json({
+      message: "Application received and resume processed.",
+      // jobTitle,
+      // extractedText: fullText,
+      // totalPages: pagePaths.length,
+      // pageFiles: pagePaths,
+    });
+  } catch (err) {
+    console.error("❌ Error processing resume:", err.message);
+    return res.status(500).json({
+      message: "Failed to process resume.",
+      error: err.message,
+    });
+  }
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`✅ Server running on http://localhost:${PORT}`);
 });

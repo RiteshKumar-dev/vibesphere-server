@@ -15,8 +15,9 @@
     "@langchain/core": "^0.3.59",
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "langchain": "^0.3.28",
+    "langchain": "^0.3.29",
     "multer": "^2.0.1",
+    "nodemon": "^3.1.10",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
     "pdf-text-extract": "^1.5.0"
