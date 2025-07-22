@@ -16,7 +16,7 @@ await fs.mkdir(uploadsDir, { recursive: true });
 app.use(express.json());
 app.use(
   cors({
-    origin: ["http://tayyari-ai.vercel.app", "http://localhost:3000"],
+    origin: ["https://tayyari-ai.vercel.app", "http://localhost:3000"],
     credentials: true,
   })
 );
