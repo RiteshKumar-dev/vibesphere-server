@@ -158,6 +158,35 @@ app.post("/api/v1/upload/apply", upload.single("resume"), async (req, res) => {
   }
 });
 
+app.post(
+  "/api/v1/extract/resume-text",
+  upload.single("resume"),
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded." });
+    }
+
+    const filePath = req.file.path;
+    try {
+      const loader = new PDFLoader(filePath);
+      const docs = await loader.load();
+      const fullText = docs.map((doc) => doc.pageContent).join("\n");
+      await fs.unlink(filePath); // remove uploaded file after extraction
+
+      return res.status(200).json({
+        message: "Resume text extracted successfully.",
+        extractedText: fullText,
+      });
+    } catch (err) {
+      console.error("❌ Error extracting resume text:", err.message);
+      return res.status(500).json({
+        message: "Failed to extract resume text.",
+        error: err.message,
+      });
+    }
+  }
+);
+
 // Start server
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
